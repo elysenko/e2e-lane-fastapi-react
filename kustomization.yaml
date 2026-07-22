@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: colossus-e2e-lane-fastapi-react
+resources:
+  - k8s/deployment.yaml
+  - k8s/service.yaml
+  - k8s/ingress.yaml
+images:
+  - name: ubuntu:30500/e2e-lane-fastapi-react
+    digest: sha256:5708cd2d9d7ad6c49efd6c7b2dabdcfc933f0a915d9da2144d594c455ed4707f
+# Redeploy:  kubectl apply -k . (re-applies this exact image)
+# Rebuild:   re-trigger the deploy pipeline for branch main in Colossus
