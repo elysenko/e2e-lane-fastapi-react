@@ -31,7 +31,36 @@ spec:
         - name: app
           image: ubuntu:30500/e2e-lane-fastapi-react:latest
           imagePullPolicy: Always
+          ports:
+            - containerPort: 80
           envFrom:
             - secretRef:
                 name: app-secrets
                 optional: true
+          # Liveness: static /api/health (never touches the DB) so a transient DB outage
+          # does not kill the pod. Probes hit the pod directly, so no ingress prefix.
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Readiness: deep check (SELECT 1) so the pod leaves the Service rotation while
+          # the database is unreachable, then rejoins once it recovers.
+          readinessProbe:
+            httpGet:
+              path: /api/health/deep
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Startup: give the app time to boot + run init_db before liveness kicks in.
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: 80
+            periodSeconds: 5
+            failureThreshold: 30

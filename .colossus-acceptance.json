@@ -1,0 +1,5 @@
+{
+  "ready_testid": "app-ready",
+  "expect_text": ["my tasks", "about task list"],
+  "reject_signatures": ["The deploy pipeline is live", "Placeholder", "placeholder page"]
+}
