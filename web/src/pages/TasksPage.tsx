@@ -27,7 +27,7 @@ export default function TasksPage() {
     <section data-testid="tasks-page">
       <div className="page-head">
         <div>
-          <h1 data-testid="tasks-title">My Tasks</h1>
+          <h1 data-testid="tasks-title">My Task Board</h1>
           <p className="page-sub">Everything on your plate, in one place.</p>
         </div>
         <Link to="/tasks/new" className="btn btn-primary" data-testid="add-task-btn">
