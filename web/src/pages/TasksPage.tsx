@@ -31,7 +31,7 @@ export default function TasksPage() {
           <p className="page-sub">Everything on your plate, in one place.</p>
         </div>
         <Link to="/tasks/new" className="btn btn-primary" data-testid="add-task-btn">
-          + Add Task
+          + New Task
         </Link>
       </div>
 
@@ -58,7 +58,7 @@ export default function TasksPage() {
           <h3>No tasks yet</h3>
           <p>Create your first task to get started.</p>
           <Link to="/tasks/new" className="btn btn-primary">
-            + Add Task
+            + New Task
           </Link>
         </div>
       )}
