@@ -1,22 +1,41 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { signIn } from '../lib/session';
+import { signIn, type Role } from '../lib/session';
+import { api } from '../lib/api';
+
+interface AuthResponse {
+  token: string;
+  user: { id: number; email: string; role: string; name: string };
+}
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!username.trim() || !password) {
-      setError('Enter your username and password.');
+    if (!email.trim() || !password) {
+      setError('Enter your email and password.');
       return;
     }
-    // Mockup: service agent wires POST /api/auth/login and stores the JWT.
-    signIn('user', username.trim());
-    navigate('/tasks');
+    setError('');
+    setSubmitting(true);
+    try {
+      const res = await api<AuthResponse>('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      localStorage.setItem('token', res.token);
+      const role = (res.user.role.toLowerCase() === 'admin' ? 'admin' : 'user') as Exclude<Role, null>;
+      signIn(role, res.user.name || res.user.email);
+      navigate('/tasks');
+    } catch {
+      setError('Invalid email or password.');
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -30,8 +49,8 @@ export default function LoginPage() {
 
       <form className="card form-card" onSubmit={onSubmit} noValidate data-testid="login-form">
         <div className="field">
-          <label htmlFor="u">Username</label>
-          <input id="u" className="input" value={username} onChange={(e) => setUsername(e.target.value)} data-testid="login-username" />
+          <label htmlFor="u">Email</label>
+          <input id="u" type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="login-username" />
         </div>
         <div className="field">
           <label htmlFor="p">Password</label>
@@ -42,8 +61,8 @@ export default function LoginPage() {
             {error}
           </span>
         )}
-        <button type="submit" className="btn btn-primary btn-block" data-testid="login-submit">
-          Sign in
+        <button type="submit" className="btn btn-primary btn-block" disabled={submitting} data-testid="login-submit">
+          {submitting ? 'Signing in…' : 'Sign in'}
         </button>
         <p className="auth-switch">
           New here? <Link to="/signup">Create an account</Link>

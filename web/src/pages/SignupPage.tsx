@@ -1,22 +1,45 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { signIn } from '../lib/session';
+import { signIn, type Role } from '../lib/session';
+import { api, ApiError } from '../lib/api';
+
+interface AuthResponse {
+  token: string;
+  user: { id: number; email: string; role: string; name: string };
+}
 
 export default function SignupPage() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!username.trim() || password.length < 6) {
-      setError('Choose a username and a password of at least 6 characters.');
+    if (!email.trim() || password.length < 6) {
+      setError('Choose an email and a password of at least 6 characters.');
       return;
     }
-    // Mockup: service agent wires POST /api/auth/signup. First signup gets ADMIN role.
-    signIn('user', username.trim());
-    navigate('/tasks');
+    setError('');
+    setSubmitting(true);
+    try {
+      const res = await api<AuthResponse>('/api/auth/signup', {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      localStorage.setItem('token', res.token);
+      const role = (res.user.role.toLowerCase() === 'admin' ? 'admin' : 'user') as Exclude<Role, null>;
+      signIn(role, res.user.name || res.user.email);
+      navigate('/tasks');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setError('That email is already registered.');
+      } else {
+        setError('Could not create your account. Please try again.');
+      }
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -30,8 +53,8 @@ export default function SignupPage() {
 
       <form className="card form-card" onSubmit={onSubmit} noValidate data-testid="signup-form">
         <div className="field">
-          <label htmlFor="su">Username</label>
-          <input id="su" className="input" value={username} onChange={(e) => setUsername(e.target.value)} data-testid="signup-username" />
+          <label htmlFor="su">Email</label>
+          <input id="su" type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="signup-username" />
         </div>
         <div className="field">
           <label htmlFor="sp">Password</label>
@@ -42,8 +65,8 @@ export default function SignupPage() {
             {error}
           </span>
         )}
-        <button type="submit" className="btn btn-primary btn-block" data-testid="signup-submit">
-          Create account
+        <button type="submit" className="btn btn-primary btn-block" disabled={submitting} data-testid="signup-submit">
+          {submitting ? 'Creating…' : 'Create account'}
         </button>
         <p className="auth-switch">
           Already have an account? <Link to="/login">Sign in</Link>

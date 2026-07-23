@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .routers import auth, health, tasks
+from .routers import settings as admin_settings
 from .seed import init_db
 
 log = logging.getLogger("app")
@@ -61,6 +62,7 @@ app.add_middleware(PrefixStripMiddleware, prefix=settings.BASE_PATH)
 app.include_router(health.router)
 app.include_router(tasks.router)
 app.include_router(auth.router)
+app.include_router(admin_settings.router)
 
 # ---- Static SPA serving -------------------------------------------------------------
 _STATIC_DIR = os.path.abspath(settings.STATIC_DIR)

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { signOut, useSession } from '../lib/session';
 import { useNavigate } from 'react-router-dom';
+import { api } from '../lib/api';
 
 interface ServiceField {
   key: string;
@@ -14,38 +15,47 @@ interface Service {
   fields: ServiceField[];
 }
 
-// Mockup shape mirrors GET /api/admin/settings (masked values + configured status).
-// Service agent wires the real GET/PATCH; the save handler here just flips local state.
-const INITIAL: Service[] = [
-  {
-    name: 'postgresql',
-    configured: true,
-    fields: [
-      { key: 'DATABASE_URL', label: 'Database URL' },
-      { key: 'POSTGRES_PASSWORD', label: 'Password', type: 'password' },
-    ],
-  },
-  {
-    name: 'minio',
-    configured: false,
-    fields: [
-      { key: 'MINIO_ENDPOINT', label: 'Endpoint' },
-      { key: 'MINIO_ACCESS_KEY', label: 'Access key' },
-      { key: 'MINIO_SECRET_KEY', label: 'Secret key', type: 'password' },
-    ],
-  },
-];
+type Status = 'loading' | 'ready' | 'error';
 
 export default function AdminSettingsPage() {
   const { name } = useSession();
   const navigate = useNavigate();
-  const [services, setServices] = useState<Service[]>(INITIAL);
+  const [services, setServices] = useState<Service[]>([]);
+  const [status, setStatus] = useState<Status>('loading');
   const [savedKey, setSavedKey] = useState('');
+  const [savingKey, setSavingKey] = useState('');
 
-  function saveService(idx: number) {
-    setServices((prev) => prev.map((s, i) => (i === idx ? { ...s, configured: true } : s)));
-    setSavedKey(services[idx].name);
-    window.setTimeout(() => setSavedKey(''), 2500);
+  // Load the real backing-service status from GET /api/admin/settings (admin JWT).
+  useEffect(() => {
+    let alive = true;
+    api<{ services: Service[] }>('/api/admin/settings')
+      .then((d) => {
+        if (!alive) return;
+        setServices(d.services);
+        setStatus('ready');
+      })
+      .catch(() => alive && setStatus('error'));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function saveService(idx: number, values: Record<string, string>) {
+    const svc = services[idx];
+    setSavingKey(svc.name);
+    setSavedKey('');
+    try {
+      const updated = await api<Service>(`/api/admin/settings/${svc.name}`, {
+        method: 'PUT',
+        body: JSON.stringify({ values }),
+      });
+      setServices((prev) => prev.map((s, i) => (i === idx ? updated : s)));
+      setSavedKey(svc.name);
+    } catch {
+      setSavedKey('');
+    } finally {
+      setSavingKey('');
+    }
   }
 
   function logout() {
@@ -65,43 +75,68 @@ export default function AdminSettingsPage() {
         </button>
       </div>
 
+      {status === 'loading' && (
+        <div className="card state" data-testid="settings-loading" aria-busy="true">
+          <p>Loading backing services…</p>
+        </div>
+      )}
+
+      {status === 'error' && (
+        <div className="error-banner" data-testid="settings-error" role="alert">
+          <span aria-hidden="true">⚠️</span>
+          <span>We couldn't load the settings right now. Please try again in a moment.</span>
+        </div>
+      )}
+
       {savedKey && <div className="notice" data-testid="settings-saved">✓ Saved {savedKey} settings.</div>}
 
-      {services.map((svc, idx) => (
-        <form
-          key={svc.name}
-          className="card settings-group"
-          data-testid={`service-${svc.name}`}
-          onSubmit={(e) => {
-            e.preventDefault();
-            saveService(idx);
-          }}
-        >
-          <div className="settings-group-head">
-            <h3>{svc.name}</h3>
-            <span className={`badge ${svc.configured ? 'ok' : 'off'}`} data-testid={`status-${svc.name}`}>
-              {svc.configured ? 'Configured' : 'Not configured'}
-            </span>
-          </div>
-
-          {svc.fields.map((f) => (
-            <div className="field" key={f.key}>
-              <label htmlFor={f.key}>{f.label}</label>
-              <input
-                id={f.key}
-                className="input"
-                type={f.type ?? 'text'}
-                placeholder={svc.configured ? '••••••••' : `Enter ${f.label.toLowerCase()}`}
-                data-testid={`input-${f.key}`}
-              />
+      {status === 'ready' &&
+        services.map((svc, idx) => (
+          <form
+            key={svc.name}
+            className="card settings-group"
+            data-testid={`service-${svc.name}`}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const fd = new FormData(e.currentTarget);
+              const values: Record<string, string> = {};
+              svc.fields.forEach((f) => {
+                values[f.key] = String(fd.get(f.key) ?? '');
+              });
+              saveService(idx, values);
+            }}
+          >
+            <div className="settings-group-head">
+              <h3>{svc.name}</h3>
+              <span className={`badge ${svc.configured ? 'ok' : 'off'}`} data-testid={`status-${svc.name}`}>
+                {svc.configured ? 'Configured' : 'Not configured'}
+              </span>
             </div>
-          ))}
 
-          <button type="submit" className="btn btn-primary" data-testid={`save-${svc.name}`}>
-            Save {svc.name}
-          </button>
-        </form>
-      ))}
+            {svc.fields.map((f) => (
+              <div className="field" key={f.key}>
+                <label htmlFor={f.key}>{f.label}</label>
+                <input
+                  id={f.key}
+                  name={f.key}
+                  className="input"
+                  type={f.type ?? 'text'}
+                  placeholder={svc.configured ? '••••••••' : `Enter ${f.label.toLowerCase()}`}
+                  data-testid={`input-${f.key}`}
+                />
+              </div>
+            ))}
+
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={savingKey === svc.name}
+              data-testid={`save-${svc.name}`}
+            >
+              {savingKey === svc.name ? 'Saving…' : `Save ${svc.name}`}
+            </button>
+          </form>
+        ))}
     </section>
   );
 }
